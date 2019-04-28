@@ -43,6 +43,7 @@ import com.health.openscale.core.database.ScaleMeasurementDAO;
 import com.health.openscale.core.database.ScaleUserDAO;
 import com.health.openscale.core.datatypes.ScaleMeasurement;
 import com.health.openscale.core.datatypes.ScaleUser;
+import com.health.openscale.core.garminsync.ExportToGarminBackgroundTask;
 import com.health.openscale.core.utils.Converters;
 import com.health.openscale.core.utils.CsvHelper;
 import com.health.openscale.gui.fragments.FragmentUpdateListener;
@@ -148,7 +149,7 @@ public class OpenScale {
                         db.setForeignKeyConstraintsEnabled(true);
                     }
                 })
-                .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+                .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
                 .build();
         measurementDAO = appDB.measurementDAO();
         userDAO = appDB.userDAO();
@@ -337,6 +338,17 @@ public class OpenScale {
             alarmHandler.entryChanged(context, scaleMeasurement);
             updateScaleData();
             triggerWidgetUpdate();
+
+            new ExportToGarminBackgroundTask(context, scaleMeasurement, new ExportToGarminBackgroundTask.TaskListener() {
+                @Override
+                public void onExportToGarminTaskFinished(Boolean result) {
+                    if (result) {
+                        Toast.makeText(context, "Exported to Garmin Connect successfully.", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(context, "Exported to Garmin Connect failed.", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }).execute();
         } else {
             Timber.d("to be added measurement is thrown away because measurement with the same date and time already exist");
             if (!silent) {
