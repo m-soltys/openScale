@@ -7,8 +7,8 @@ android {
         testApplicationId "com.health.openscale.test"
         minSdkVersion 19
         targetSdkVersion 28
-        versionCode 44
-        versionName "2.0.3"
+        versionCode 45
+        versionName "2.0.4"
 
         manifestPlaceholders = [
                 appIcon: "@drawable/ic_launcher_openscale"
@@ -78,13 +78,18 @@ dependencies {
     implementation 'androidx.room:room-runtime:2.1.0-alpha04'
     annotationProcessor 'androidx.room:room-compiler:2.1.0-alpha04'
     androidTestImplementation 'androidx.room:room-testing:2.1.0-alpha04'
+
+    // GarminSync HttpClient
+    implementation files('libs/fit.jar')
+    implementation 'cz.msebera.android:httpclient:4.4.1.2'
+
     // Timber
     implementation 'com.jakewharton.timber:timber:4.7.1'
     // Local unit tests
     testImplementation 'junit:junit:4.12'
     // Instrumented unit tests
-    androidTestImplementation 'androidx.annotation:annotation:1.0.0'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.0'
+    androidTestImplementation 'androidx.annotation:annotation:1.0.1'
+    androidTestImplementation 'androidx.test:runner:1.1.1'
     androidTestImplementation 'androidx.test:rules:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-contrib:3.1.1'
@@ -95,5 +100,16 @@ tasks.withType(Test) {
         exceptionFormat "full"
         events "started", "skipped", "passed", "failed"
         showStandardStreams true
+    }
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        def requested = details.requested
+        if (requested.group == "com.android.support") {
+            if (!requested.name.startsWith("multidex")) {
+                details.useVersion "26.+"
+            }
+        }
     }
 }
