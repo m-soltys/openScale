@@ -15,6 +15,8 @@
 */
 package com.health.openscale.core.garminsync;
 
+import androidx.annotation.NonNull;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -47,13 +49,14 @@ public class GarminConnect {
 
   private static final String GET_TICKET_URL = "https://connect.garmin.com/modern/?ticket=";
 
-  private static final Pattern LOCATION_PATTERN = Pattern.compile("Location: (.*)");
+  private static final Pattern LOCATION_PATTERN = Pattern.compile("location: (.*)");
+  private static final String CSRF_TOKEN_PATTERN = "name=\"_csrf\" *value=\"([A-Z0-9]+)\"";
   private static final String TICKET_FINDER_PATTERN = "ticket=([^']+?)\";";
-  private static final String FIT_FILE_UPLOAD_URL = "https://connect.garmin.com/modern/proxy/upload-service/upload/.fit";
+  public static final String FIT_FILE_UPLOAD_URL = "https://connect.garmin.com/modern/proxy/upload-service/upload/.fit";
 
   private DefaultHttpClient httpclient;
 
-  boolean SignIn(final String username, final String password) {
+  public boolean signIn(final String username, final String password) {
     PoolingClientConnectionManager conman = new PoolingClientConnectionManager(SchemeRegistryFactory.createDefault());
     conman.setMaxTotal(20);
     conman.setDefaultMaxPerRoute(20);
@@ -61,50 +64,61 @@ public class GarminConnect {
 
     final String signin_url = "https://sso.garmin.com/sso/signin?service=" +
             "https%3A%2F%2Fconnect.garmin.com%2Fmodern%2F" +
-            "&webhost=olaxpw-conctmodern010.garmin.com" +
-            "&source=https%3A%2F%2Fconnect.garmin.com%2Fen-EN%2Fsignin" +
+            "&webhost=https%3A%2F%2Fconnect.garmin.com" +
+            "&source=https%3A%2F%2Fconnect.garmin.com%2Fsignin%2F" +
             "&redirectAfterAccountLoginUrl=https%3A%2F%2Fconnect.garmin.com%2Fmodern%2F" +
             "&redirectAfterAccountCreationUrl=https%3A%2F%2Fconnect.garmin.com%2Fmodern%2F" +
             "&gauthHost=https%3A%2F%2Fsso.garmin.com%2Fsso" +
-            "&locale=en" +
+            "&locale=en_US" +
             "&id=gauth-widget" +
-            "&cssUrl=https%3A%2F%2Fstatic.garmincdn.com%2Fcom.garmin.connect%2Fui%2Fcss%2Fgauth-custom-v1.2-min.css" +
-            "&privacyStatementUrl=%2F%2Fconnect.garmin.com%2Fen-EN%2Fprivacy%2F" +
+            "&cssUrl=https%3A%2F%2Fconnect.garmin.com%2Fgauth-custom-v1.2-min.css" +
+            "&privacyStatementUrl=https%3A%2F%2Fwww.garmin.com%2Fen-US%2Fprivacy%2Fconnect%2F" +
             "&clientId=GarminConnect" +
             "&rememberMeShown=true" +
             "&rememberMeChecked=false" +
             "&createAccountShown=true" +
             "&openCreateAccount=false" +
-            "&usernameShown=false" +
             "&displayNameShown=false" +
             "&consumeServiceTicket=false" +
             "&initialFocus=true" +
             "&embedWidget=false" +
-            "&generateExtraServiceTicket=false" +
-            "&globalOptInShown=false" +
+            "&generateExtraServiceTicket=true" +
+            "&generateTwoExtraServiceTickets=false" +
+            "&generateNoServiceTicket=false" +
+            "&globalOptInShown=true" +
             "&globalOptInChecked=false" +
             "&mobile=false" +
-            "&connectLegalTerms=true";
+            "&connectLegalTerms=true" +
+            "&showTermsOfUse=false" +
+            "&showPrivacyPolicy=false" +
+            "&showConnectLegalAge=false" +
+            "&locationPromptShown=true" +
+            "&showPassword=true" +
+            "&useCustomHeader=false";
 
     try {
       HttpParams params = new BasicHttpParams();
       params.setParameter("http.protocol.handle-redirects", false);
 
       // Create session
-      httpclient.execute(new HttpGet(signin_url)).getEntity();
+      HttpEntity loginEntity = httpclient.execute(new HttpGet(signin_url)).getEntity();
+      String loginContent = EntityUtils.toString(loginEntity);
+      String csrf = getCSRFToken(loginContent);
 
       // Sign in
       HttpPost post = new HttpPost(signin_url);
+      post.setHeader("Referer", signin_url);
       post.setParams(params);
-      post.addHeader("origin", "https://sso.garmin.com");
       List<NameValuePair> nvp = new ArrayList<>();
       nvp.add(new BasicNameValuePair("embed", "false"));
       nvp.add(new BasicNameValuePair("username", username));
       nvp.add(new BasicNameValuePair("password", password));
+      nvp.add(new BasicNameValuePair("_csrf", csrf));
       post.setEntity(new UrlEncodedFormEntity(nvp));
       HttpEntity entity1 = httpclient.execute(post).getEntity();
+
       String responseAsString = EntityUtils.toString(entity1);
-      String ticket = GetTicketIdFromResponse(responseAsString);
+      String ticket = getTicketIdFromResponse(responseAsString);
 
       // Ticket
       HttpGet get = new HttpGet(GET_TICKET_URL + ticket);
@@ -112,18 +126,34 @@ public class GarminConnect {
       Header getTicketLocation = httpclient.execute(get).getFirstHeader("location");
 
       // Follow redirections
-      get = CreateHttpGetFromLocationHeader(getTicketLocation);
+      get = createHttpGetFromLocationHeader(getTicketLocation);
       get.setParams(params);
       httpclient.execute(get);
 
-      return IsSignedIn(username);
+      // Initialise session. Redirect manually, as there are two URLs
+      // marked by HttpClient as duplicates (but in fact these differ by queryparams).
+      /*
+      RedirectStrategy oldRedirectStrategy = httpclient.getRedirectStrategy();
+      httpclient.setRedirectStrategy(new NoRedirectStrategy());
+      CloseableHttpResponse initSessionResponse = httpclient.execute(new HttpGet(LEGACY_INIT_SESSION_URL));
+      Header initSessionLocation = initSessionResponse.getFirstHeader("location");
+      for(int i=0; i<5; i++){
+        get = createHttpGetFromLocationHeader(initSessionLocation);
+        get.setParams(params);
+        initSessionLocation = httpclient.execute(get).getFirstHeader("location");
+      }
+      httpclient.setRedirectStrategy(oldRedirectStrategy);
+      */
+
+      return isSignedIn(username);
     } catch (Exception e) {
       httpclient.getConnectionManager().shutdown();
       return false;
     }
   }
 
-  private HttpGet CreateHttpGetFromLocationHeader(Header h1) {
+  @NonNull
+  private HttpGet createHttpGetFromLocationHeader(Header h1) {
     Matcher matcher = LOCATION_PATTERN.matcher(h1.toString());
     matcher.find();
     String redirect = matcher.group(1);
@@ -131,14 +161,22 @@ public class GarminConnect {
     return new HttpGet(redirect);
   }
 
-  private String GetTicketIdFromResponse(String responseAsString) {
-    Pattern pattern = Pattern.compile(TICKET_FINDER_PATTERN);
-    Matcher matcher = pattern.matcher(responseAsString);
+  private String getTicketIdFromResponse(String responseAsString) {
+    return getFirstMatch(TICKET_FINDER_PATTERN, responseAsString);
+  }
+
+  private String getCSRFToken(String responseAsString) {
+    return getFirstMatch(CSRF_TOKEN_PATTERN, responseAsString);
+  }
+
+  private String getFirstMatch(String regex, String within) {
+    Pattern pattern = Pattern.compile(regex);
+    Matcher matcher = pattern.matcher(within);
     matcher.find();
     return matcher.group(1);
   }
 
-  private boolean IsSignedIn(String username) {
+  public boolean isSignedIn(String username) {
     if (httpclient == null) return false;
     try {
       CloseableHttpResponse execute = httpclient.execute(new HttpGet("https://connect.garmin.com/modern/proxy/userprofile-service/socialProfile"));
@@ -146,13 +184,13 @@ public class GarminConnect {
       String json = EntityUtils.toString(entity);
       JSONObject js_user = new JSONObject(json);
       entity.consumeContent();
-      return js_user.getString("userName").equals(username);
+      return js_user.getString("userName") != null && !js_user.getString("userName").isEmpty();
     } catch (Exception e) {
       return false;
     }
   }
 
-  boolean UploadFitFile(File fitFile) {
+  public boolean uploadFitFile(File fitFile) {
     if (httpclient == null) return false;
     try {
       HttpPost post = new HttpPost(FIT_FILE_UPLOAD_URL);
@@ -186,12 +224,15 @@ public class GarminConnect {
 
       return true;
     } catch (Exception e) {
-      Timber.e(e);
       return false;
     }
   }
 
-  public void Close() {
+  public boolean uploadFitFile(String fitFilePath) {
+    return uploadFitFile(new File(fitFilePath));
+  }
+
+  public void close() {
     if (httpclient != null) {
       httpclient.getConnectionManager().shutdown();
       httpclient = null;

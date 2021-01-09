@@ -44,9 +44,9 @@ public class ExportToGarminBackgroundTask extends AsyncTask<Void, Void, Boolean>
             ScaleUser user = openScale.getSelectedScaleUser();
 
 
-            if (garminConnect.SignIn(user.getGarminLogin(), user.getGarminPassword())) {
+            if (garminConnect.signIn(user.getGarminLogin(), user.getGarminPassword())) {
                 File output = Export.BuildFitFile(context, scaleMeasurement);
-                garminConnect.UploadFitFile(output);
+                garminConnect.uploadFitFile(output);
             } else {
                 result = false;
             }
@@ -54,7 +54,7 @@ public class ExportToGarminBackgroundTask extends AsyncTask<Void, Void, Boolean>
             result = false;
             Timber.e(ex, "GarminException");
         } finally {
-            garminConnect.Close();
+            garminConnect.close();
         }
 
         return result;
