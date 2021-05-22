@@ -40,6 +40,7 @@ import cz.msebera.android.httpclient.impl.conn.PoolingClientConnectionManager;
 import cz.msebera.android.httpclient.impl.conn.SchemeRegistryFactory;
 import cz.msebera.android.httpclient.message.BasicNameValuePair;
 import cz.msebera.android.httpclient.params.BasicHttpParams;
+import cz.msebera.android.httpclient.params.CoreProtocolPNames;
 import cz.msebera.android.httpclient.params.HttpParams;
 import cz.msebera.android.httpclient.util.EntityUtils;
 
@@ -59,6 +60,7 @@ public class GarminConnect {
     conman.setMaxTotal(20);
     conman.setDefaultMaxPerRoute(20);
     httpclient = new DefaultHttpClient(conman);
+    httpclient.getParams().setParameter(CoreProtocolPNames.USER_AGENT, "Mozilla/5.0 (Linux; Android 10; SM-A205U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.210 Mobile Safari/537.36");
 
     final String signin_url = "https://sso.garmin.com/sso/signin?service=" +
             "https%3A%2F%2Fconnect.garmin.com%2Fmodern%2F" +
@@ -94,6 +96,7 @@ public class GarminConnect {
             "&showPassword=true" +
             "&useCustomHeader=false" +
             "&mfaRequired=false" +
+            "&performMFACheck=false" +
             "&rememberMyBrowserShown=false" +
             "&rememberMyBrowserChecked=false";
 
